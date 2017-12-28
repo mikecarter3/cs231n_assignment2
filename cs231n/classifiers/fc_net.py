@@ -188,19 +188,12 @@ class FullyConnectedNet(object):
         # parameters should be initialized to zero.                                #
         ############################################################################
         
-        
-        # TODO(mikecarter3): figure out fencepost/index details here
-        self.params["W1"] = np.random.norm(0,weight_scale,(input_dims,hidden_dims[0]))
-
-        for i in range(numlayers-2)
-            self.params["W{}".format(i+2)] = np.random.norm(0,weight_scale,(hidden_dims[i],hidden_dims[i+1]))
-        
-        self.params["W{}".format(i+2)] = np.random.norm(0,weight_scale,(hidden_dims[i],num_classes))
-
-        
-        "b1" : np.zeros(hidden_dim,),
-            "W2" : np.random.normal(0, weight_scale, (hidden_dim, num_classes)),
-            "b2" : np.zeros(num_classes),
+        io = np.hstack((input_dim, hidden_dims, num_classes))
+        for i in range(len(io)-1):
+            self.params["W{}".format(i+1)] = np.random.normal(0,weight_scale,(io[i],io[i+1]))
+            self.params["b{}".format(i+1)] = np.zeros(io[i+1])
+            #print("W{} : shape = {}".format(i+1, self.params["W{}".format(i+1)].shape))
+            #print("b{} : shape = {}".format(i+1, self.params["b{}".format(i+1)].shape))
         
         ############################################################################
         #                             END OF YOUR CODE                             #
@@ -247,6 +240,8 @@ class FullyConnectedNet(object):
                 bn_param['mode'] = mode
 
         scores = None
+        w_cache = {}
+        relu_cache = {}
         ############################################################################
         # TODO: Implement the forward pass for the fully-connected net, computing  #
         # the class scores for X and storing them in the scores variable.          #
@@ -259,7 +254,27 @@ class FullyConnectedNet(object):
         # self.bn_params[1] to the forward pass for the second batch normalization #
         # layer, etc.                                                              #
         ############################################################################
-        pass
+        
+        #print("affine W1")
+        hidden_layer, cache = affine_forward(X, self.params["W1"], self.params["b1"])
+        w_cache[1] = cache
+        #print("relu 1")
+        hidden_layer, cache = relu_forward(hidden_layer)
+        relu_cache[1] = cache
+        
+        for i in np.arange(2,self.num_layers,1):
+            #print("affine W{}".format(i))
+            hidden_layer, cache = affine_forward(hidden_layer, self.params["W{}".format(i)], self.params["b{}".format(i)])
+            w_cache[i] = cache
+            #print("relu {}".format(i))
+            hidden_layer, cache = relu_forward(hidden_layer)
+            relu_cache[i] = cache
+        
+        #print("affine W{}".format(i+1))
+        scores, cache = affine_forward(hidden_layer, self.params["W{}".format(i+1)], self.params["b{}".format(i+1)])
+        w_cache[i+1] = cache
+
+        
         ############################################################################
         #                             END OF YOUR CODE                             #
         ############################################################################
@@ -282,7 +297,25 @@ class FullyConnectedNet(object):
         # automated tests, make sure that your L2 regularization includes a factor #
         # of 0.5 to simplify the expression for the gradient.                      #
         ############################################################################
-        pass
+        sm_loss, dout = softmax_loss(scores, y)
+        reg_loss = 0
+        for i in np.arange(1,self.num_layers+1,1):
+            #print("adding reg loss for W{}".format(i))
+            reg_loss += 0.5 * self.reg * np.sum(self.params["W{}".format(i)]**2)
+        loss = sm_loss + reg_loss
+        
+        dhidden, dw, db = affine_backward(dout, w_cache[self.num_layers])
+        #print("computing gradients for layer {}".format(i))
+        grads["W{}".format(self.num_layers)] = dw + self.reg*self.params["W{}".format(self.num_layers)]
+        grads["b{}".format(self.num_layers)] = db
+        
+        for i in np.arange(1, self.num_layers, 1):
+            #print("computing gradients for layer {}".format(self.num_layers-i))
+            dout = relu_backward(dhidden, relu_cache[self.num_layers-i])
+            dhidden, dw, db = affine_backward(dout, w_cache[self.num_layers-i])
+            grads["W{}".format(self.num_layers-i)] = dw + self.reg*self.params["W{}".format(self.num_layers-i)]
+            grads["b{}".format(self.num_layers-i)] = db
+        
         ############################################################################
         #                             END OF YOUR CODE                             #
         ############################################################################
